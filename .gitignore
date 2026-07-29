@@ -1,0 +1,29 @@
+# STM32 build outputs
+*.o
+*.d
+*.elf
+*.hex
+*.bin
+*.map
+*.lst
+Build/
+build/
+Debug/
+Release/
+.settings/
+.project
+.cproject
+.mxproject
+*.launch
+
+# IDE
+.idea/
+.vscode/
+*.uvguix.*
+*.scvd
+*.uvoptx
+JLinkLog.txt
+
+# OS
+Thumbs.db
+Desktop.ini
