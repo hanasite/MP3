@@ -36,6 +36,7 @@
  *   ips_cfg.dc_port  = GPIOB; ips_cfg.dc_pin  = GPIO_PIN_1;
  *   ips_cfg.rst_port = GPIOA; ips_cfg.rst_pin = GPIO_PIN_4;
  *   ips_cfg.bl_port  = GPIOA; ips_cfg.bl_pin  = GPIO_PIN_5;
+ *   ips_cfg.invert = 0;               // 0=正常色彩, 1=反相
  *   // scl/sda 无需填写 (hspi != NULL 时忽略)
  *
  *   // 3. 初始化
@@ -61,6 +62,7 @@
  *   ips_cfg.bl_port  = GPIOB;  ips_cfg.bl_pin  = GPIO_PIN_3;
  *   ips_cfg.scl_port = GPIOB;  ips_cfg.scl_pin = GPIO_PIN_13;
  *   ips_cfg.sda_port = GPIOB;  ips_cfg.sda_pin = GPIO_PIN_15;
+ *   ips_cfg.invert = 0;               // 0=正常色彩, 1=反相
  *   IPS_Screen_Init(&ips_cfg);
  *
  * ---------------------------------------------------------------------------
@@ -116,6 +118,8 @@ typedef struct {
     /* 软件 SPI 引脚 (hspi == NULL 时有效，否则忽略) */
     GPIO_TypeDef        *scl_port;      uint16_t scl_pin;
     GPIO_TypeDef        *sda_port;      uint16_t sda_pin;
+
+    uint8_t              invert;        /* 0=正常色彩, 1=反相 */
 } IPS_Screen_InitTypeDef;
 
 /* ==================== RGB565 颜色定义 ==================== */
