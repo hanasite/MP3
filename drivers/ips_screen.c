@@ -26,6 +26,7 @@ static IPS_Screen_FontTypeDef ips_display_font = IPS_FONT_8X16;
 
 /* ==================== 接口模式 ==================== */
 static uint8_t ips_mode;            /* 0=SW_SPI, 1=HW_SPI */
+static uint8_t ips_invert;
 static SPI_HandleTypeDef *ips_hspi;
 
 /* 软件 SPI 引脚 */
@@ -257,6 +258,20 @@ void IPS_Screen_Full(uint16_t color)
 void IPS_Screen_SetDir(IPS_Screen_DirTypeDef dir)
 {
     ips_display_dir = dir;
+
+    /* 立即更新 MADCTL 寄存器 */
+    {
+        uint8_t madctl;
+        switch (dir) {
+            case IPS_DIR_PORTAIT:       madctl = 0x00; break;
+            case IPS_DIR_PORTAIT_180:   madctl = 0xC0; break;
+            case IPS_DIR_CROSSWISE:     madctl = 0x70; break;
+            case IPS_DIR_CROSSWISE_180: madctl = 0xA0; break;
+            default:                    madctl = 0x00; break;
+        }
+        IPS_WriteCommand(0x36);
+        IPS_WriteData8(madctl);
+    }
     switch (dir) {
         case IPS_DIR_PORTAIT:
         case IPS_DIR_PORTAIT_180:
@@ -762,7 +777,7 @@ static void IPS_InitSequence(void)
     IPS_WriteData8(0x17); IPS_WriteData8(0x14); IPS_WriteData8(0x15);
     IPS_WriteData8(0x31); IPS_WriteData8(0x34);
 
-    IPS_WriteCommand(0x21);  /* Inversion On */
+    IPS_WriteCommand(ips_invert ? 0x21 : 0x20);  /* Inversion */
     IPS_WriteCommand(0x29);  /* Display On */
 
     IPS_Screen_Clear();
@@ -791,6 +806,7 @@ void IPS_Screen_Init(const IPS_Screen_InitTypeDef *config)
     ips_dc_port  = config->dc_port;   ips_dc_pin  = config->dc_pin;
     ips_rst_port = config->rst_port;  ips_rst_pin = config->rst_pin;
     ips_bl_port  = config->bl_port;   ips_bl_pin  = config->bl_pin;
+    ips_invert  = config->invert;
 
     if (config->hspi != NULL) {
         ips_mode = 1;
