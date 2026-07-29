@@ -1,42 +1,23 @@
 # MP3 Player
 
-> 大一暑假 MP3 播放器学习项目 — STM32F407 + FatFS + FreeRTOS + LVGL
+STM32F407 MP3 播放器项目，持续施工中。
 
-## 硬件
+## 驱动模块 (`drivers/`)
 
-- MCU: STM32F407VET6
-- 屏幕: ST7789 240×240 IPS LCD (SPI)
-- 存储: MicroSD (SDIO)
-- 传感器: MPU6050 (I2C)
-- 音频: VS1053 / PCM5102
-
-## 目录结构
-
-```
-├── drivers/          # 外设驱动模块
-│   ├── ips_screen.*       ST7789 彩色 LCD
-│   ├── ips_screen_font.*  ASCII 字库
-│   ├── mpu6050.*          6 轴传感器
-│   ├── OLED.*             SSD1306 OLED
-│   ├── Servo.*            PWM 舵机
-│   └── CmdParser.*        串口命令行
-├── Core/             # CubeMX 生成代码
-├── FATFS/            # FatFS 文件系统
-└── Middlewares/      # FreeRTOS, LVGL
-```
-
-## 模块特点
-
-- **IPS 屏幕**: 结构体初始化，HW/SW SPI 自动识别，反相可配，旋转支持
-- **MPU6050**: HW/SW I2C 双模式，逐飞风格注释
-- **中文字库**: 外部传入字模，不占 Flash
+| 模块 | 说明 |
+|---|---|
+| `ips_screen.h/c` + `font.h/c` | ST7789 彩色 LCD 驱动，SPI 接口，结构体初始化 |
+| `mpu6050.h/c` | 6 轴加速度计+陀螺仪，I2C 接口 |
+| `OLED.h/c` + `Font.h` | SSD1306 OLED 驱动 |
+| `Servo.h/c` | PWM 舵机控制 |
+| `CmdParser.h/c` | 串口命令行解析器 |
 
 ## 工具
 
-| 脚本 | 路径 | 用途 |
-|---|---|---|
-| jpg_to_rgb565.ps1 | drivers/ | 图片 → RGB565 C 数组 |
-| rgb565_to_c.ps1 | drivers/ | bin → C 数组 |
+| 脚本 | 用途 |
+|---|---|
+| `jpg_to_rgb565.ps1` | JPG/PNG → RGB565 C 数组 |
+| `rgb565_to_c.ps1` | RGB565 bin → C 数组 |
 
 ## 致谢
 
