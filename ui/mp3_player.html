@@ -1,0 +1,843 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MP3 Player UI Prototype</title>
+<style>
+/* ===== 三主题 token（白色极简默认 / 深色 hifi / 渐变） ===== */
+:root {
+  --bg: #f2f3f5; --card: #ffffff; --text: #1a1a1a; --text2: #8a8f99;
+  --accent: #4f8cff; --shadow: 0 2px 8px rgba(0,0,0,.08); --radius: 16px;
+}
+#screen.theme-dark {
+  --bg: #0e1116; --card: #151a22; --text: #ffffff; --text2: #93a0b3;
+  --accent: #d9a441; --shadow: 0 2px 10px rgba(0,0,0,.4);
+}
+/* 初音未来主题（青绿底 + 粉色强调） */
+#screen.theme-miku {
+  --bg: linear-gradient(160deg, #a8edea, #39c5bb); --card: rgba(255,255,255,.94); --text: #1a1a1a; --text2: #3d7a75;
+  --accent: #ff7fb6; --shadow: 0 4px 16px rgba(255,127,182,.35);
+}
+/* Miku / Bili 主题：所有外圈统一白色（聚焦描边 / 选中 / seek 环） */
+#screen.theme-miku .focus,
+#screen.theme-bili .focus { outline-color: #fff; }
+#screen.theme-miku .focus.sel,
+#screen.theme-bili .focus.sel,
+#screen.theme-miku .cover-ring.seek,
+#screen.theme-bili .cover-ring.seek { box-shadow: 0 0 0 3px #fff; }
+/* Bilibili 主题（粉蓝） */
+#screen.theme-bili {
+  --bg: linear-gradient(160deg, #fb7299, #00a1d6); --card: rgba(255,255,255,.94); --text: #1a1a1a; --text2: #6b6b6b;
+  --accent: #fb7299; --shadow: 0 4px 16px rgba(0,161,214,.35);
+}
+* { box-sizing: border-box; }
+body {
+  display: flex; justify-content: center; align-items: center; min-height: 100vh;
+  background: #dfe1e5; margin: 0; font-family: system-ui, -apple-system, "Segoe UI", "Microsoft YaHei", sans-serif;
+}
+/* ===== 页面布局：设备 + 独立硬件模拟（按实际方位） ===== */
+#stage { display: flex; flex-direction: column; align-items: center; gap: 8px; }
+/* 顶部按钮：设备上方偏右 */
+#hwTopWrap { margin-left: 220px; text-align: center; }
+#midRow { display: flex; align-items: flex-start; gap: 10px; }
+/* 温度传感器：左侧边偏下 */
+#hwTempWrap { padding-top: 180px; text-align: center; }
+/* 侧键：右侧上半集中 */
+#hwSide { display: flex; flex-direction: column; align-items: center; gap: 24px; padding-top: 4px; }
+/* ===== 机身（纯净：壳 + 屏幕） ===== */
+#device {
+  background: #2a2e35; border-radius: 28px; padding: 14px;
+  box-shadow: 0 12px 40px rgba(0,0,0,.3); display: inline-block;
+}
+/* ===== 屏幕模拟 ===== */
+#screen {
+  width: 240px; height: 320px; background: var(--bg); border-radius: 24px; overflow: hidden;
+  position: relative; box-shadow: 0 10px 40px rgba(0,0,0,.25); border: 6px solid #333;
+  transition: background .3s;
+  color: var(--text);  /* 全局文字用主题色（深色主题下避免继承默认黑色） */
+}
+/* ===== 独立硬件模拟（与设备分离、按实际位置） ===== */
+.hw-label { font-size: 11px; color: #888; }
+#hwTop {
+  width: 44px; height: 10px; background: #3d434d; border-radius: 5px;
+  cursor: pointer; border: none; display: inline-block;
+}
+#hwTop:active { background: #555c68; }
+.hw-key {
+  width: 8px; height: 52px; border-radius: 4px; border: none; background: #3d434d;
+  cursor: pointer; box-shadow: inset 0 1px 2px rgba(0,0,0,.3);
+}
+.hw-key:active { background: #555c68; transform: translateX(1px); }
+#hwEnc {
+  width: 30px; height: 30px; border-radius: 50%; background: #4a505c;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,.4); cursor: ns-resize;
+  display: flex; align-items: center; justify-content: center;
+  color: #9aa3b0; font-size: 9px; user-select: none;
+}
+#hwEnc:active { background: #565d6b; }
+#hwTemp {
+  font-size: 13px; color: #555; cursor: pointer; font-family: ui-monospace, Consolas, monospace;
+  background: #fff; border: 1px solid #ddd; border-radius: 8px; padding: 4px 10px;
+}
+#hwTemp.hot { color: #e05c5c; font-weight: 700; border-color: #e05c5c; }
+#page { position: absolute; inset: 0; display: flex; flex-direction: column; }
+/* ===== 提示条 ===== */
+#hint {
+  position: fixed; left: 16px; top: 16px; font-size: 12px; color: #666; line-height: 1.8;
+  background: #fff; padding: 10px 14px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,.1);
+  max-width: 220px;
+}
+#hint b { color: #333; }
+/* ===== 主题按钮 ===== */
+#themeBtn {
+  position: fixed; right: 16px; top: 16px; padding: 6px 12px; border-radius: 8px;
+  border: 1px solid #ccc; background: #fff; cursor: pointer; font-size: 12px;
+}
+/* ===== 播放页 ===== */
+.status { display: flex; justify-content: space-between; padding: 8px 12px 2px; font-size: 10px; color: var(--text2); white-space: nowrap; overflow: hidden; }
+/* CSS 电池：外框 + 正极 + 背景填充 + 内部文字 */
+.batt {
+  position: relative; display: inline-flex; align-items: center; justify-content: center;
+  width: 46px; height: 18px; border: 2px solid currentColor; border-radius: 4px; margin-right: 4px;
+}
+.batt::after {
+  content: ''; position: absolute; right: -4px; top: 4px; bottom: 4px;
+  width: 2.5px; background: currentColor; border-radius: 1px;
+}
+.batt .level { position: absolute; left: 1.5px; top: 1.5px; bottom: 1.5px; background: currentColor; opacity: .85; border-radius: 2px; }
+.batt .txt { position: relative; z-index: 1; font-size: 9px; color: #fff; font-weight: 700; text-shadow: 0 0 2px rgba(0,0,0,.4); }
+/* 环形进度 + 圆形封面 */
+.cover-ring {
+  width: 146px; height: 146px; margin: 6px auto 4px; border-radius: 50%;
+  padding: 5px; box-sizing: border-box;
+  flex-shrink: 0;  /* 禁止被 flex 压缩（内容溢出时封面保持正方形） */
+  background: conic-gradient(var(--accent) var(--pct, 0deg), rgba(128,128,128,.2) 0deg);
+  display: flex; align-items: center; justify-content: center;
+  transition: background .3s;
+}
+.cover-ring.seek { box-shadow: 0 0 0 3px var(--accent); }
+/* 歌词面板（替代封面，同尺寸） */
+.lyrics {
+  width: 146px; height: 146px; margin: 6px auto 4px; border-radius: var(--radius);
+  background: var(--card); box-shadow: var(--shadow); flex-shrink: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  gap: 6px; padding: 10px; text-align: center;
+}
+.lyrics .lprev, .lyrics .lnext { font-size: 11px; color: var(--text2); }
+.lyrics .lcur { font-size: 15px; font-weight: 700; color: var(--accent); }
+.cover {
+  width: 100%; height: 100%; border-radius: 50%;
+  background: linear-gradient(145deg, #7c9cf5, #b0a6f0); display: flex; align-items: center;
+  justify-content: center; font-size: 46px; color: #fff; box-shadow: var(--shadow);
+}
+#screen.theme-dark .cover { background: linear-gradient(145deg, #3a4458, #6b5a3a); }
+#screen.theme-miku .cover { background: linear-gradient(145deg, #39c5bb, #a8edea); }
+#screen.theme-bili .cover { background: linear-gradient(145deg, #fb7299, #00a1d6); }
+.songinfo { text-align: center; padding: 2px 12px; }
+.songinfo .title { font-size: 19px; font-weight: 700; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bar { display: flex; align-items: center; gap: 6px; padding: 4px 14px; }
+.bar .track { flex: 1; height: 6px; border-radius: 3px; background: rgba(128,128,128,.25); overflow: hidden; }
+.bar .fill { height: 100%; background: var(--accent); border-radius: 3px; transition: width .2s; }
+.bar span { font-size: 10px; color: var(--text2); min-width: 30px; }
+.bar .seekmark { color: var(--accent); font-weight: 700; }
+.controls { display: flex; justify-content: space-around; padding: 6px 8px 8px; margin-top: auto; }
+.ctl {
+  width: 52px; height: 42px; border-radius: 12px; border: 1px solid rgba(128,128,128,.3);
+  background: var(--card); color: var(--text); font-size: 17px; cursor: pointer;
+}
+.ctl.play { background: var(--accent); color: #fff; border: none; font-size: 19px; }
+/* ===== 焦点/选中反馈 ===== */
+.focus { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 10px; }
+/* 选中（进入交互模式）：实心主题色，明显反馈 */
+.focus.sel { outline: none; background: var(--accent); color: #fff; box-shadow: 0 0 0 3px var(--accent-dim, rgba(0,0,0,.1)); }
+.focus.sel .title { color: #fff; }
+.focus.sel .fill { background: #fff; }
+.focus.sel .track { background: rgba(255,255,255,.4); }
+.focus.sel.cover-ring { background: var(--accent); padding: 5px; }
+.focus.sel.cover-ring .cover { box-shadow: none; }
+/* ===== 文件列表 ===== */
+.flist { padding: 4px 0 10px; overflow-y: auto; height: calc(100% - 32px); }
+.frow {
+  display: flex; align-items: center; gap: 8px; height: 36px; padding: 0 12px;
+  border-radius: 10px; margin: 2px 8px; cursor: pointer;
+}
+.frow.focus { background: var(--accent); color: #fff; }
+.frow .fico { width: 20px; text-align: center; }
+.frow .fname { flex: 1; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+.frow .fdur { font-size: 11px; opacity: .85; }
+/* ===== YES/NO 遮罩 + 绿红细条（贴右缘，对应侧键 A/B） ===== */
+.confirm {
+  position: absolute; inset: 0; background: rgba(0,0,0,.45); z-index: 10;
+  display: flex; align-items: center; justify-content: center;
+}
+.confirm .msg { background: var(--card); color: var(--text); padding: 18px 24px; border-radius: 12px; font-size: 14px; box-shadow: var(--shadow); }
+.confirm .strip {
+  position: absolute; right: 4px; width: 10px; height: 56px; border-radius: 5px;
+}
+.confirm .strip.yes { top: 38%; background: #3fae6a; }
+.confirm .strip.no { top: 52%; background: #e05c5c; }
+/* ===== 熄屏 ===== */
+.off { position: absolute; inset: 0; background: #0a0a0a; display: flex; align-items: center; justify-content: center; font-size: 28px; color: #333; }
+/* ===== 锁屏（初音未来：绿渐变 + HATSUNE/MIKU 转动变粉解锁） ===== */
+.lock { position: absolute; inset: 0; }
+.lock .wall { position: absolute; inset: 0; background: linear-gradient(160deg, #8fe8d8, #2fa88f); }
+.lock .cols { position: absolute; top: 26%; left: 0; right: 0; bottom: 20%; }
+/* 海报风：大字左半边（半透明）与右列错开 */
+.lock .bigword {
+  position: absolute; left: 10px; top: 8px; display: flex; letter-spacing: 4px;
+  font-size: 58px; font-weight: 800;
+}
+.lock .bigword > span { color: rgba(255,255,255,.4); transition: color .2s; }
+.lock .subword {
+  position: absolute; right: 12px; bottom: 6px; display: flex; letter-spacing: 2px;
+  font-size: 26px; font-weight: 700;
+}
+.lock .subword > span { color: #fff; transition: color .2s; }
+.lock .cols span.pink { color: #ff7fb6; }  /* 已解锁的字符变粉 */
+.lock .hint { position: absolute; bottom: 34px; width: 100%; text-align: center; font-size: 11px; color: rgba(255,255,255,.6); }
+.lock .unlock { position: absolute; top: 20%; width: 100%; text-align: center; font-size: 13px; color: rgba(255,255,255,.95); transition: color .15s; }
+</style>
+</head>
+<body>
+
+<div id="hint">
+  <b>MP3 原型操作</b><br>
+  ↑↓ = 编码器旋转（移焦点/调值）<br>
+  → = 侧键A（选中/进入/是）· 双击=按钮<br>
+  ← 长按2s = 歌词切换<br>
+  ← = 侧键B（退出/取消/否）<br>
+  Enter = 顶部按钮（短按熄屏/锁屏·1s导航·3s关机·5s强关）<br>
+  锁屏：转动编码器解锁
+</div>
+<div id="stage">
+  <div id="hwTopWrap">
+    <span class="hw-label">顶部按钮</span><br>
+    <button id="hwTop" title="顶部按钮：短按熄屏·1s导航·3s关机·5s强关"></button>
+  </div>
+  <div id="midRow">
+    <div id="hwTempWrap">
+      <span class="hw-label">温度传感器</span><br>
+      <div id="hwTemp" title="点击模拟握住（升温）">30°C</div>
+    </div>
+    <div id="device">
+      <div id="screen"><div id="page"></div></div>
+    </div>
+    <div id="hwSide">
+      <button class="hw-key" id="hwA" title="侧键 A：确认/进入"></button>
+      <div id="hwEnc" title="编码器：滚轮模拟旋转">◉</div>
+      <button class="hw-key" id="hwB" title="侧键 B：退出/取消"></button>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+/* ============ 状态 ============ */
+const S = {
+  page: 'player',        // player | files | settings | nav
+  theme: 'light',        // light | dark | grad
+  focusIdx: 0,           // 播放页焦点索引
+  selected: false,       // 是否已选中元素（旋钮交互模式）
+  power: true, screenOn: true,
+  playing: false, time: 0, duration: 183, volume: 70, mode: 0, // 0顺序 1单曲 2随机
+  song: { title: '勾指起誓', artist: '泠鸢yousa' },
+  showArtist: false,     // 歌名/歌手切换显示
+  showLyrics: false,     // 歌词显示模式（焦点封面长按 A 3s 切换）
+  seekMode: false, seekPos: 0,
+  navIdx: 0, filesPath: '/', fileFocus: 0,
+  wifiConnected: 'mikumiku', wifiFocus: 0,  // 当前 WiFi 连接 + WiFi 页焦点
+  wifiOn: true, apMode: false, apSsid: 'ESP32-MP3',  // WiFi 开关 / 本机热点
+  savedWifi: ['mikumiku'],  // 已保存配置的网络（✓ 标记）
+  locked: false, temp: 30, tempHighStart: 0,  // 锁屏 / 温度（握住检测）
+  unlockProgress: 0, lastRotate: 0,  // 锁屏转动解锁进度
+  battery: 87,  // 电量模拟（右上角统一显示）
+  tickCount: 0,
+  confirm: null,
+};
+/* ============ 主题 ============ */
+const THEME_LIST = ['light', 'dark', 'miku', 'bili'];
+const THEME_NAMES = { light: '白色极简', dark: '深色 hifi', miku: '初音未来', bili: 'Bilibili' };
+function cycleTheme() {
+  const i = THEME_LIST.indexOf(S.theme);
+  S.theme = THEME_LIST[(i + 1) % THEME_LIST.length];
+  applyTheme(); renderAll();
+}
+function applyTheme() {
+  document.getElementById('screen').className = S.theme === 'light' ? '' : 'theme-' + S.theme;
+}
+/* ============ 播放页 ============ */
+const playerElems = [
+  { id: 'cover', label: '封面' },      // 封面环：选中后旋钮=seek
+  { id: 'title', label: '歌名' },
+  { id: 'volume', label: '音量' },
+  { id: 'mode', label: '播放模式' },
+  { id: 'prev', label: '上一首' },
+  { id: 'play', label: '播放' },
+  { id: 'next', label: '下一首' },
+];
+function fmtTime(t) {
+  const m = Math.floor(t / 60), s = Math.floor(t % 60);
+  return m + ':' + String(s).padStart(2, '0');
+}
+const MODE_ICONS = ['🔁', '🔂', '🔀'];
+/* 电量显示（CSS 电池：背景填充 + 内部文字） */
+function battHtml() {
+  const pct = Math.max(0, S.battery);
+  const color = pct > 50 ? '#3fae6a' : pct > 20 ? '#d9a441' : '#e05c5c';
+  return `<span class="batt" style="color:${color}"><span class="level" style="width:${pct}%"></span><span class="txt">${pct}</span></span>`;
+}
+/* 模拟歌词（时间戳 ms + 文本） */
+const LYRICS = [
+  [0, '勾指起誓 - 泠鸢yousa'],
+  [8000, '第一句歌词（占位）'],
+  [16000, '第二句歌词（占位）'],
+  [24000, '第三句歌词（占位）'],
+  [32000, '第四句歌词（占位）'],
+  [40000, '第五句歌词（占位）'],
+  [48000, '第六句歌词（占位）'],
+];
+function currentLyricIdx() {
+  const ms = S.time * 1000;
+  let idx = 0;
+  for (let i = 0; i < LYRICS.length; i++) if (ms >= LYRICS[i][0]) idx = i;
+  return idx;
+}
+function renderLyrics() {
+  const idx = currentLyricIdx();
+  const prev = LYRICS[idx - 1], cur = LYRICS[idx], next = LYRICS[idx + 1];
+  return `<div class="lprev">${prev ? prev[1] : '&nbsp;'}</div>
+          <div class="lcur">${cur ? cur[1] : '&nbsp;'}</div>
+          <div class="lnext">${next ? next[1] : '&nbsp;'}</div>`;
+}
+function renderPlayer() {
+  const p = document.getElementById('page');
+  const seekTime = S.seekMode ? S.seekPos : S.time;
+  p.innerHTML = `
+  <div class="status"><span>${fmtTime(seekTime)} / ${fmtTime(S.duration)}</span>${battHtml()}</div>
+  ${S.showLyrics
+    ? `<div class="lyrics" data-f="0">${renderLyrics()}</div>`
+    : `<div class="cover-ring ${S.seekMode ? 'seek' : ''}" style="--pct:${seekTime / S.duration * 360}deg" data-f="0">
+        <div class="cover">${S.song.title[0]}</div>
+      </div>`}
+  <div class="songinfo" data-f="1"><div class="title">${S.showArtist ? 'By: ' + S.song.artist : S.song.title}</div></div>
+  <div class="bar" data-f="2"><span>🔊</span><div class="track"><div class="fill" style="width:${S.volume}%"></div></div><span>${S.volume}%</span></div>
+  <div class="controls">
+    <button class="ctl" data-f="3">${MODE_ICONS[S.mode]}</button>
+    <button class="ctl" data-f="4">⏪</button>
+    <button class="ctl play" data-f="5">${S.playing ? '⏸' : '▶'}</button>
+    <button class="ctl" data-f="6">⏩</button>
+  </div>`;
+  paintFocus();
+}
+function paintFocus() {
+  if (S.page !== 'player') return;
+  document.querySelectorAll('.focus').forEach(e => e.classList.remove('focus', 'sel'));
+  const el = document.querySelector(`[data-f="${S.focusIdx}"]`);
+  if (el) {
+    el.classList.add('focus');
+    if (S.selected) el.classList.add('sel');  // 选中态：实心反馈
+  }
+}
+/* ============ 文件列表页 ============ */
+/* 模拟文件树（对应 F:\ESP32idf\MP3_project\MUSIC_example 真实文件） */
+const fileTree = {
+  '/': [
+    { name: 'MUSIC', type: 'dir' },
+    { name: '录音', type: 'dir' },
+    { name: '笔记.txt', type: 'file' },
+  ],
+  '/MUSIC': [
+    { name: 'cinnamons、evening cinema - Summertime (夏日时光).mp3', type: 'mp3', size: '9.6MB' },
+    { name: '周杰伦-花海.mp3', type: 'mp3', size: '4.0MB' },
+    { name: '泠鸢yousa - 勾指起誓.mp3', type: 'mp3', size: '7.0MB' },
+    { name: '穗乃果奶 - 悠哉山歌大王.mp3', type: 'mp3', size: '3.5MB' },
+    { name: '阿桑 - 一直很安静.wav', type: 'mp3', size: '275MB' },
+  ],
+  '/录音': [
+    { name: '会议录音.wav', type: 'mp3', size: '1.2MB' },
+  ],
+};
+const PLAYLIST_NAMES = ['music', '歌曲', '音乐', 'mp3'];
+function isPlaylistFolder(n) { return PLAYLIST_NAMES.some(k => n.toLowerCase().includes(k)); }
+function renderFiles() {
+  const items = fileTree[S.filesPath] || [];
+  const folderName = S.filesPath.split('/').pop();
+  const playlist = isPlaylistFolder(folderName);
+  const p = document.getElementById('page');
+  const rows = items.map((it, i) => {
+    const icon = it.type === 'dir' ? '📁' : it.type === 'mp3' ? '🎵' : '📄';
+    const right = it.type === 'dir' ? '›' : (it.size || '');
+    return `<div class="frow ${i === S.fileFocus ? 'focus' : ''}" data-i="${i}"><span class="fico">${icon}</span><span class="fname">${it.name}</span><span class="fdur">${right}</span></div>`;
+  }).join('');
+  p.innerHTML = `<div class="status"><span>◀ ${S.filesPath}${playlist ? ' ♪ 歌单' : ''}</span>${battHtml()}</div><div class="flist">${rows}</div>`;
+}
+/* ============ 设置页 / 导航页 ============ */
+const navElems = ['播放页', '文件列表', '设置', '主题'];
+const settingElems = ['播放模式', '主题', 'WiFi', '系统信息', '恢复出厂'];
+function renderSettings() {
+  const vals = [MODE_ICONS[S.mode], THEME_NAMES[S.theme], S.wifiConnected || '未连接', 'v1.0', '⚠'];
+  document.getElementById('page').innerHTML =
+    `<div class="status"><span>◀ 设置</span>${battHtml()}</div><div class="flist">` +
+    settingElems.map((n, i) => `<div class="frow ${i === S.focusIdx ? 'focus' : ''}"><span class="fname">${n}</span><span class="fdur">${vals[i]}</span></div>`).join('') +
+    `</div>`;
+}
+/* WiFi 页（模拟网络列表） */
+const WIFI_NETWORKS = [
+  { ssid: 'mikumiku', locked: true },
+  { ssid: '我去初音未来！', locked: true },
+  { ssid: 'CMCC-Free', locked: false },
+  { ssid: 'Home-5G', locked: true },
+];
+function renderWifi() {
+  // 链表：开关 → 网络列表（已保存✓/已连接） → 本机热点
+  const rows = [];
+  rows.push({ icon: S.wifiOn ? '📶' : '🚫', name: 'WiFi 开关', val: S.wifiOn ? '开' : '关' });
+  WIFI_NETWORKS.forEach(n => {
+    let val = '';
+    if (S.savedWifi.includes(n.ssid)) val += '✓ ';
+    if (S.wifiConnected === n.ssid) val += '已连接';
+    rows.push({ icon: n.locked ? '🔒' : '📶', name: n.ssid, val });
+  });
+  rows.push({ icon: '📱', name: '本机 WiFi（配置）', val: S.apMode ? '热点 ' + S.apSsid : '' });
+  document.getElementById('page').innerHTML =
+    `<div class="status"><span>◀ WiFi ${S.wifiOn ? '已开启' : '已关闭'}</span>${battHtml()}</div><div class="flist">` +
+    rows.map((r, i) => `<div class="frow ${i === S.wifiFocus ? 'focus' : ''}"><span class="fico">${r.icon}</span><span class="fname">${r.name}</span><span class="fdur">${r.val}</span></div>`).join('') +
+    `</div>`;
+}
+function renderNav() {
+  const themeName = THEME_NAMES[S.theme];
+  document.getElementById('page').innerHTML =
+    `<div class="status"><span>☰ 导航</span>${battHtml()}</div><div class="flist">` +
+    navElems.map((n, i) => `<div class="frow ${i === S.navIdx ? 'focus' : ''}"><span class="fname">${n}</span><span class="fdur">${i === 3 ? themeName : ''}</span></div>`).join('') +
+    `</div>`;
+}
+/* ============ 熄屏 / YES-NO ============ */
+function renderOff(text) {
+  document.getElementById('page').innerHTML = `<div class="off">${text}</div>`;
+}
+/* ===== 锁屏（壁纸 + 时间） ===== */
+function fmtClock() {
+  const d = new Date();
+  return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+}
+function fmtDate() {
+  const d = new Date();
+  return (d.getMonth() + 1) + '月' + d.getDate() + '日 星期' + '日一二三四五六'[d.getDay()];
+}
+function renderLock() {
+  const word = w => [...w].map(c => `<span>${c}</span>`).join('');
+  document.getElementById('page').innerHTML = `
+    <div class="lock">
+      <div class="wall"></div>
+      <div class="cols">
+        <div class="bigword">${word('我去，')}</div>
+        <div class="subword">${word('初音未来！')}</div>
+      </div>
+      <div class="unlock" id="unlockHint">转动编码器</div>
+      <div class="hint">长按顶部按钮回熄屏</div>
+    </div>`;
+  updateLockChars();
+}
+const LOCK_CHARS = 8;  // "我去，初音未来！" 字符总数
+/* 转动进度：按绝对值，字符逐个变粉，全粉后再转一下进入 */
+function updateLockChars() {
+  const abs = Math.abs(S.unlockProgress);
+  const chars = document.querySelectorAll('.lock .cols span');
+  chars.forEach((c, i) => c.classList.toggle('pink', i < Math.min(abs, LOCK_CHARS)));
+  const h = document.getElementById('unlockHint');
+  if (h) h.textContent = abs >= LOCK_CHARS ? '再转一下进入' : '转动编码器';
+}
+function renderConfirm() {
+  document.getElementById('page').innerHTML =
+    `<div class="confirm"><div class="msg">${S.confirm.msg}</div><div class="strip yes"></div><div class="strip no"></div></div>`;
+}
+/* ============ 统一渲染 ============ */
+function renderAll() {
+  if (!S.power) { renderOff('已关机'); return; }   // 关机（实际设备不亮屏，文字仅原型提示）
+  if (S.confirm) { renderConfirm(); return; }
+  if (S.locked) { renderLock(); return; }          // 锁屏
+  if (!S.screenOn) { renderOff('🔒'); return; }    // 熄屏
+  if (S.page === 'player') renderPlayer();
+  else if (S.page === 'files') renderFiles();
+  else if (S.page === 'settings') renderSettings();
+  else if (S.page === 'wifi') renderWifi();
+  else renderNav();
+}
+/* ============ 交互 ============ */
+function handleRotate(dir) {
+  if (!S.power || S.confirm) return;
+  if (S.locked) {
+    // 锁屏：正反累计（无下限），按绝对值解锁；无操作重置时更新显示
+    const now = Date.now();
+    if (now - S.lastRotate > 2500) {
+      if (S.unlockProgress !== 0) { S.unlockProgress = 0; updateLockChars(); }
+    } else {
+      S.unlockProgress += dir;
+      if (Math.abs(S.unlockProgress) >= LOCK_CHARS + 1) {  // 全粉后再转一下 → 解锁
+        S.locked = false; S.screenOn = true; S.unlockProgress = 0;
+        renderAll();
+      } else {
+        updateLockChars();
+      }
+    }
+    S.lastRotate = now;
+    return;
+  }
+  if (!S.screenOn) return;
+  // seek 模式：编码器方向与正常逻辑相反（环形进度顺时针，旋钮手感反向）
+  if (S.seekMode) { S.seekPos = Math.max(0, Math.min(S.duration, S.seekPos - dir * 5)); renderPlayer(); return; }
+  if (S.page === 'player') {
+    if (S.selected) {
+      const id = playerElems[S.focusIdx].id;
+      if (id === 'volume') S.volume = Math.max(0, Math.min(100, S.volume + dir * 2));
+      if (id === 'cover') { S.seekMode = true; S.seekPos = S.time; }
+      if (id === 'title') S.showArtist = !S.showArtist;  // 旋钮左右切换歌名/歌手
+      renderPlayer();
+    } else {
+      // ↑(dir=+1) = 焦点上移（索引减）
+      S.focusIdx = Math.max(0, Math.min(playerElems.length - 1, S.focusIdx - dir));
+      renderPlayer();
+    }
+  } else if (S.page === 'files') {
+    const n = (fileTree[S.filesPath] || []).length;
+    S.fileFocus = Math.max(0, Math.min(n - 1, S.fileFocus - dir));
+    renderFiles();
+  } else if (S.page === 'settings') {
+    S.focusIdx = Math.max(0, Math.min(settingElems.length - 1, S.focusIdx - dir));
+    renderSettings();
+  } else if (S.page === 'wifi') {
+    S.wifiFocus = Math.max(0, Math.min(WIFI_NETWORKS.length - 1, S.wifiFocus - dir));
+    renderWifi();
+  } else if (S.page === 'nav') {
+    S.navIdx = Math.max(0, Math.min(navElems.length - 1, S.navIdx - dir));
+    renderNav();
+  }
+}
+/* 底部按钮触发（快速双击侧键 A） */
+function triggerBtn(id) {
+  if (id === 'play') {
+    S.playing = !S.playing;
+    if (S.playing) audio.play().catch(() => {});
+    else audio.pause();
+  }
+  if (id === 'mode') S.mode = (S.mode + 1) % 3;
+  if (id === 'prev' || id === 'next') {
+    // 在歌单（/MUSIC）中切歌
+    const songs = (fileTree['/MUSIC'] || []).filter(x => x.type === 'mp3');
+    const cur = Math.max(0, songs.findIndex(s => s.name === (S.song.file || '')));
+    const next = songs[(cur + (id === 'next' ? 1 : -1) + songs.length) % songs.length];
+    if (next) {
+      S.song = { title: next.name.replace(/\.[^.]+$/, ''), artist: '未知歌手', file: next.name };
+      S.time = 0; S.seekMode = false; S.seekPos = 0;
+      playFile(next.name);  // 切歌直接播放
+    }
+  }
+  renderPlayer();
+}
+let lastATime = 0;
+let aStart = 0, bStart = 0;
+let aDown = false, bDown = false, topDown = false;  // 防 key repeat（长按重复 keydown）
+let bTimer = null;  // 长按 B 2s 自动切换歌词定时器
+function handleA() {
+  const now = Date.now();
+  const isDouble = now - lastATime < 300;  // 快速双击检测
+  lastATime = now;
+  if (!S.power) return;  // 关机状态：仅顶部按钮长按 3s 开机
+  if (S.confirm) { const fn = S.confirm.onYes; S.confirm = null; if (fn) fn(); renderAll(); return; }
+  if (!S.screenOn) { S.screenOn = true; renderAll(); return; }
+  if (S.seekMode) { S.time = S.seekPos; S.seekMode = false; S.selected = false; audio.currentTime = S.seekPos; renderPlayer(); return; }  // 确认后退出控件（真实跳转）
+  if (S.page === 'player') {
+    const id = playerElems[S.focusIdx].id;
+    const isBtn = ['mode', 'prev', 'play', 'next'].includes(id);
+    if (!S.selected) {
+      if (isBtn) {
+        if (isDouble) triggerBtn(id);  // 底部按钮：快速双击 A 触发（单击不进入）
+        return;
+      }
+      if (!isDouble) { S.selected = true; renderPlayer(); }  // 非按钮：单击选中进入
+      return;
+    }
+    // 选中状态：确认（封面环进入 seek；其余退出选中）
+    if (id === 'cover') { S.seekMode = true; S.seekPos = S.time; }
+    S.selected = false;
+    renderPlayer();
+  } else if (S.page === 'files') {
+    const it = (fileTree[S.filesPath] || [])[S.fileFocus];
+    if (it && it.type === 'dir') {
+      S.filesPath += (S.filesPath === '/' ? '' : '/') + it.name;
+      S.fileFocus = 0;
+      renderFiles();
+    } else if (it) {
+      S.song = { title: it.name.replace(/\.[^.]+$/, ''), artist: '未知歌手', file: it.name };
+      S.time = 0;  // 选歌从头播放
+      playFile(it.name);  // 真实播放本地文件
+      S.page = 'player'; S.selected = false; S.focusIdx = 6;
+      renderAll();
+    }
+  } else if (S.page === 'settings') {
+    const i = S.focusIdx;
+    if (i === 0) S.mode = (S.mode + 1) % 3;
+    if (i === 1) cycleTheme();
+    if (i === 2) { S.page = 'wifi'; S.wifiFocus = 0; renderWifi(); return; }  // 进入 WiFi 页
+    if (i === 4) S.confirm = {
+      msg: '确定恢复出厂设置？',
+      onYes: () => { S.volume = 70; S.mode = 0; S.theme = 'light'; applyTheme(); },
+      onNo: () => {},
+    };
+    renderSettings();
+  } else if (S.page === 'wifi') {
+    if (S.wifiFocus === 0) {
+      // WiFi 开关
+      S.wifiOn = !S.wifiOn;
+      if (!S.wifiOn) S.wifiConnected = null;
+    } else if (S.wifiFocus === WIFI_NETWORKS.length + 1) {
+      // 本机热点（配置模式）：手机连热点 → 浏览器配置
+      S.apMode = !S.apMode;
+      if (S.apMode) S.confirm = { msg: '手机连接 ' + S.apSsid + '\n浏览器打开 192.168.4.1 配置', onYes: () => { S.apMode = false; }, onNo: () => {} };
+    } else {
+      // 连接网络：连接成功即保存配置（✓）
+      const net = WIFI_NETWORKS[S.wifiFocus - 1];
+      if (net && S.wifiOn) {
+        S.wifiConnected = net.ssid;
+        if (!S.savedWifi.includes(net.ssid)) S.savedWifi.push(net.ssid);
+      }
+    }
+    renderWifi();
+    return;
+  } else if (S.page === 'nav') {
+    if (S.navIdx === 3) { cycleTheme(); renderNav(); return; }  // 主题：选中即切换
+    S.page = ['player', 'files', 'settings'][S.navIdx];
+    S.focusIdx = 0;
+    renderAll();
+  }
+}
+function handleB() {
+  if (!S.power) return;
+  if (S.confirm) { const fn = S.confirm.onNo; S.confirm = null; if (fn) fn(); renderAll(); return; }
+  if (S.seekMode) { S.seekMode = false; renderPlayer(); return; }
+  if (S.page === 'player' && S.selected) { S.selected = false; renderPlayer(); return; }
+  if (S.page === 'files') {
+    if (S.filesPath !== '/') {
+      S.filesPath = S.filesPath.slice(0, S.filesPath.lastIndexOf('/')) || '/';
+      S.fileFocus = 0;
+      renderFiles();
+    } else {
+      S.page = 'nav'; S.navIdx = 0; renderAll();  // 根目录退出 → 导航页（最上层链表）
+    }
+    return;
+  }
+  if (S.page === 'settings') { S.page = 'nav'; S.navIdx = 0; renderAll(); return; }  // 设置退出 → 导航页
+  if (S.page === 'wifi') { S.page = 'settings'; renderSettings(); return; }          // WiFi 退出 → 设置
+}
+/* ============ 顶部按钮：短按熄屏 · 长按1s导航 · 长按3s关机确认 · 长按5s强制关机 ============ */
+let topStart = 0;
+let topTimers = [];
+function clearTopTimers() {
+  topTimers.forEach(clearTimeout);
+  topTimers = [];
+}
+function scheduleTopActions() {
+  // 1s：锁屏时长按 = 回熄屏；否则回导航页
+  topTimers.push(setTimeout(() => {
+    if (S.locked) { S.locked = false; S.screenOn = false; renderAll(); return; }
+    if (S.power && S.page !== 'nav') {
+      S.screenOn = true; S.page = 'nav'; S.navIdx = 0;
+      renderAll();
+    }
+  }, 1000));
+  // 3s：关机确认（YES/NO）
+  topTimers.push(setTimeout(() => {
+    if (S.power && !S.confirm) {
+      S.confirm = { msg: '确定关机？', onYes: () => { S.power = false; S.screenOn = false; }, onNo: () => {} };
+      renderAll();
+    }
+  }, 3000));
+  // 5s：强制关机
+  topTimers.push(setTimeout(() => {
+    S.power = false; S.screenOn = false; S.confirm = null;
+    renderAll();
+  }, 5000));
+}
+/* ============ 键盘映射 ============ */
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowUp') { e.preventDefault(); handleRotate(+1); }
+  else if (e.key === 'ArrowDown') { e.preventDefault(); handleRotate(-1); }
+  else if (e.key === 'ArrowRight') { e.preventDefault(); if (!aDown) { aDown = true; aStart = Date.now(); handleA(); } }
+  else if (e.key === 'ArrowLeft') {
+    e.preventDefault();
+    if (!bDown) {
+      bDown = true;
+      bStart = Date.now();
+      handleB();
+      // 长按 2s 自动切换歌词（每次长按只切换一次）
+      bTimer = setTimeout(() => {
+        bTimer = null;
+        if (S.page === 'player' && S.focusIdx === 0) {
+          S.showLyrics = !S.showLyrics;
+          renderPlayer();
+        }
+      }, 2000);
+    }
+  }
+  else if (e.key === 'Enter') {
+    e.preventDefault();
+    if (!topDown) {
+      topDown = true;
+      topStart = Date.now();
+      if (!S.power) {
+        // 关机状态：长按 3s 开机
+        topTimers.push(setTimeout(() => {
+          S.power = true; S.screenOn = true;
+          renderAll();
+        }, 3000));
+      } else {
+        scheduleTopActions();
+      }
+    }
+  }
+});
+document.addEventListener('keyup', e => {
+  if (e.key === 'ArrowRight') aDown = false;
+  if (e.key === 'ArrowLeft') {
+    if (bTimer) { clearTimeout(bTimer); bTimer = null; }  // 短按松开：取消未触发的切换
+    bDown = false;
+  }
+  if (e.key === 'Enter') {
+    clearTopTimers();
+    // 短按（<1s）：点亮→熄屏；熄屏→锁屏；锁屏→无操作（解锁靠转动编码器）
+    if (Date.now() - topStart < 1000 && S.power) {
+      if (S.locked) { /* 无操作 */ }
+      else if (!S.screenOn) { S.locked = true; S.unlockProgress = 0; }
+      else S.screenOn = false;
+      renderAll();
+    }
+    topDown = false;
+  }
+});
+/* ============ 独立硬件模拟（鼠标可点） ============ */
+document.getElementById('hwA').addEventListener('click', () => handleA());
+document.getElementById('hwB').addEventListener('click', () => handleB());
+document.getElementById('hwEnc').addEventListener('wheel', e => {
+  e.preventDefault();
+  handleRotate(e.deltaY < 0 ? +1 : -1);  // 滚轮向上 = 编码器正向
+});
+// 顶部按钮：按住模拟长按（复用键盘 Enter 的定时器逻辑）
+const topBtnEl = document.getElementById('hwTop');
+topBtnEl.addEventListener('mousedown', () => {
+  if (!topDown) {
+    topDown = true;
+    topStart = Date.now();
+    if (!S.power) {
+      topTimers.push(setTimeout(() => { S.power = true; S.screenOn = true; renderAll(); }, 3000));
+    } else {
+      scheduleTopActions();
+    }
+  }
+});
+topBtnEl.addEventListener('mouseup', () => {
+  clearTopTimers();
+  if (Date.now() - topStart < 1000 && S.power) {
+    if (S.locked) { /* 无操作 */ }
+    else if (!S.screenOn) { S.locked = true; S.unlockProgress = 0; }
+    else S.screenOn = false;
+    renderAll();
+  }
+  topDown = false;
+});
+
+/* ===== 温度传感器（独立硬件模拟，点击模拟握住） ===== */
+function updateTemp() {
+  const el = document.getElementById('hwTemp');
+  if (el) {
+    el.textContent = Math.round(S.temp) + '°C';
+    el.classList.toggle('hot', S.temp >= 38);  // 超过阈值标红
+  }
+}
+document.getElementById('hwTemp').addEventListener('click', () => {
+  S.temp = 42;  // 模拟握住（升温到阈值以上）
+  updateTemp();
+});
+
+/* ============ 走秒（时间/环角度/温度/锁屏检测，不重建 DOM） ============ */
+setInterval(() => {
+  // 温度回落（向 30 收敛）
+  if (S.temp > 30) S.temp = Math.max(30, S.temp - 0.5);
+  updateTemp();
+  // 高温 ≥3s 检测：熄屏时握住 → 锁屏
+  if (!S.power) {
+    S.tempHighStart = 0;
+  } else if (!S.screenOn && !S.locked && S.temp >= 38) {
+    if (!S.tempHighStart) S.tempHighStart = Date.now();
+    else if (Date.now() - S.tempHighStart >= 3000) {
+      S.locked = true;
+      S.tempHighStart = 0;
+      renderAll();
+    }
+  } else {
+    S.tempHighStart = 0;
+  }
+  // 锁屏时间实时刷新
+  if (S.locked) {
+    const t = document.querySelector('.lock .time');
+    if (t) t.textContent = fmtClock();
+  }
+  // 电量缓慢消耗（模拟）
+  if (S.power && S.battery > 5 && S.tickCount++ % 15 === 0) {
+    S.battery--;
+    const b = document.querySelector('.batt');
+    if (b) {
+      const color = S.battery > 50 ? '#3fae6a' : S.battery > 20 ? '#d9a441' : '#e05c5c';
+      b.style.color = color;
+      const lvl = b.querySelector('.level');
+      if (lvl) lvl.style.width = S.battery + '%';
+      const txt = b.querySelector('.txt');
+      if (txt) txt.textContent = S.battery;
+    }
+  }
+  if (S.power && S.playing && S.screenOn && !S.confirm) {
+    // 时间由 audio timeupdate 驱动（真实播放），这里只维护环/歌词（非播放中由 timeupdate 处理）
+    if (S.page === 'player' && !S.seekMode) {
+      const t = document.querySelector('.status span:last-child');
+      if (t) t.textContent = fmtTime(S.time) + ' / ' + fmtTime(S.duration);
+      if (S.showLyrics) {
+        // 歌词模式：更新歌词行（重建歌词面板）
+        const lyr = document.querySelector('.lyrics');
+        if (lyr) lyr.innerHTML = renderLyrics();
+      } else {
+        const ring = document.querySelector('.cover-ring');
+        if (ring) ring.style.setProperty('--pct', (S.time / S.duration * 360) + 'deg');
+      }
+    }
+  }
+}, 1000);
+/* ============ 真实播放（浏览器解码 MUSIC_example 本地文件） ============ */
+const audio = new Audio();
+audio.addEventListener('loadedmetadata', () => {
+  if (audio.duration && isFinite(audio.duration)) S.duration = Math.floor(audio.duration);
+  renderPlayer();
+});
+audio.addEventListener('timeupdate', () => {
+  if (S.playing) {
+    S.time = Math.floor(audio.currentTime);
+    if (S.page === 'player' && !S.seekMode) {
+      const t = document.querySelector('.status span:last-child');
+      if (t) t.textContent = fmtTime(S.time) + ' / ' + fmtTime(S.duration);
+      const ring = document.querySelector('.cover-ring');
+      if (ring) ring.style.setProperty('--pct', (S.time / S.duration * 360) + 'deg');
+    }
+  }
+});
+audio.addEventListener('ended', () => { S.playing = false; S.time = 0; renderAll(); });
+function playFile(name) {
+  audio.src = '../MUSIC_example/' + encodeURI(name);
+  audio.play().then(() => { S.playing = true; }).catch(() => { S.playing = false; });
+}
+
+/* ============ 初始化 ============ */
+applyTheme();
+renderAll();
+updateTemp();
+</script>
+</body>
+</html>
