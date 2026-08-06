@@ -798,7 +798,7 @@ setInterval(() => {
   if (S.power && S.playing && S.screenOn && !S.confirm) {
     // 时间由 audio timeupdate 驱动（真实播放），这里只维护环/歌词（非播放中由 timeupdate 处理）
     if (S.page === 'player' && !S.seekMode) {
-      const t = document.querySelector('.status span:last-child');
+      const t = document.querySelector('.status span:first-child');  // 时间在左（电池是 last-child！）
       if (t) t.textContent = fmtTime(S.time) + ' / ' + fmtTime(S.duration);
       if (S.showLyrics) {
         // 歌词模式：更新歌词行（重建歌词面板）
@@ -821,7 +821,7 @@ audio.addEventListener('timeupdate', () => {
   if (S.playing) {
     S.time = Math.floor(audio.currentTime);
     if (S.page === 'player' && !S.seekMode) {
-      const t = document.querySelector('.status span:last-child');
+      const t = document.querySelector('.status span:first-child');  // 时间在左（电池是 last-child！）
       if (t) t.textContent = fmtTime(S.time) + ' / ' + fmtTime(S.duration);
       const ring = document.querySelector('.cover-ring');
       if (ring) ring.style.setProperty('--pct', (S.time / S.duration * 360) + 'deg');
